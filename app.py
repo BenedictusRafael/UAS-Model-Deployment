@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import pickle
+import joblib
 import numpy as np
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -48,7 +49,7 @@ class DataPreprocessor:
 # LOAD MODEL DAN PREPROCESSOR
 @st.cache_resource
 def load_models():
-    model = pickle.load(open('model.pkl', 'rb'))
+    model = joblib.load('model_compressed.pkl')
     preprocessor = pickle.load(open('preprocessor.pkl', 'rb'))
     encoder = pickle.load(open('encoder.pkl', 'rb'))
     return model, preprocessor, encoder
