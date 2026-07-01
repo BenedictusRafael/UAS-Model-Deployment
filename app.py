@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import pickle
-import joblib
 import numpy as np
+import joblib
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
@@ -49,7 +49,22 @@ class DataPreprocessor:
 # LOAD MODEL DAN PREPROCESSOR
 @st.cache_resource
 def load_models():
-    model = joblib.load('model_compressed.pkl')
+    # Coba load model_compressed.pkl dengan joblib
+    try:
+        model = joblib.load('model_compressed.pkl')
+        print("Model loaded with joblib")
+    except:
+        # Jika gagal, coba model_fixed.pkl dengan pickle
+        try:
+            with open('model_fixed.pkl', 'rb') as f:
+                model = pickle.load(f)
+            print("Model loaded with pickle (fixed)")
+        except:
+            # Terakhir, coba model.pkl dengan pickle
+            with open('model.pkl', 'rb') as f:
+                model = pickle.load(f)
+            print("Model loaded with pickle (original)")
+    
     preprocessor = pickle.load(open('preprocessor.pkl', 'rb'))
     encoder = pickle.load(open('encoder.pkl', 'rb'))
     return model, preprocessor, encoder
@@ -154,8 +169,6 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("Data Pribadi")
-    
-    # === KONSISTEN: Semua number_input menggunakan float ===
     age = st.number_input("Umur", min_value=18.0, max_value=100.0, 
                           value=float(test_data.get('Age', 30)), step=1.0)
     
@@ -174,8 +187,6 @@ with col1:
     monthly_inhand_salary = st.number_input("Gaji Bulanan (Take Home Pay)", min_value=0.0, 
                                             value=float(test_data.get('Monthly_Inhand_Salary', 5000000.0)), 
                                             step=100000.0)
-    
-    # === KONSISTEN: integer untuk jumlah ===
     num_bank_accounts = st.number_input("Jumlah Rekening Bank", min_value=0, max_value=20, 
                                          value=int(test_data.get('Num_Bank_Accounts', 2)), step=1)
     num_credit_card = st.number_input("Jumlah Kartu Kredit", min_value=0, max_value=20, 
@@ -193,8 +204,6 @@ with col2:
     st.markdown("Detail Pinjaman")
     interest_rate = st.number_input("Suku Bunga (%)", min_value=0.0, max_value=100.0, 
                                     value=float(test_data.get('Interest_Rate', 15.0)), step=0.5)
-    
-    # === integer untuk jumlah ===
     num_of_loan = st.number_input("Jumlah Pinjaman", min_value=0, max_value=50, 
                                   value=int(test_data.get('Num_of_Loan', 3)), step=1)
     num_of_delayed_payment = st.number_input("Jumlah Pembayaran Terlambat", min_value=0, max_value=100, 
@@ -224,6 +233,7 @@ with col2:
                                        step=100000.0)
     credit_history_years = st.number_input("Lama Riwayat Kredit (tahun)", min_value=0, max_value=50, 
                                             value=int(test_data.get('Credit_History_Years', 5)), step=1)
+
 
 
 # PREDIKSI
@@ -351,4 +361,6 @@ if st.button("Prediksi Credit Score", type="primary"):
 # FOOTER
 st.markdown("---")
 st.caption("Credit Score Prediction App")
+
+
 
