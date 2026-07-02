@@ -49,25 +49,36 @@ class DataPreprocessor:
 # LOAD MODEL DAN PREPROCESSOR
 @st.cache_resource
 def load_models():
-    # Coba load model_compressed.pkl dengan joblib
     try:
-        model = joblib.load('model_compressed.pkl')
-        print("Model loaded with joblib")
+        model = joblib.load('model_cloud.pkl')
+        preprocessor = pickle.load(open('preprocessor_cloud.pkl', 'rb'))
+        encoder = pickle.load(open('encoder_cloud.pkl', 'rb'))
+        print("Model loaded from cloud files")
+        return model, preprocessor, encoder
     except:
-        # Jika gagal, coba model_fixed.pkl dengan pickle
         try:
-            with open('model_fixed.pkl', 'rb') as f:
-                model = pickle.load(f)
-            print("Model loaded with pickle (fixed)")
+            model = joblib.load('model_compressed.pkl')
+            preprocessor = pickle.load(open('preprocessor.pkl', 'rb'))
+            encoder = pickle.load(open('encoder.pkl', 'rb'))
+            print("Model loaded with joblib")
+            return model, preprocessor, encoder
         except:
-            # Terakhir, coba model.pkl dengan pickle
-            with open('model.pkl', 'rb') as f:
-                model = pickle.load(f)
-            print("Model loaded with pickle (original)")
-    
-    preprocessor = pickle.load(open('preprocessor.pkl', 'rb'))
-    encoder = pickle.load(open('encoder.pkl', 'rb'))
-    return model, preprocessor, encoder
+            try:
+                with open('model.pkl', 'rb') as f:
+                    model = pickle.load(f)
+                preprocessor = pickle.load(open('preprocessor.pkl', 'rb'))
+                encoder = pickle.load(open('encoder.pkl', 'rb'))
+                print("Model loaded with pickle (original)")
+                return model, preprocessor, encoder
+            except Exception as e:
+                st.error(f"Error loading model: {str(e)}")
+                st.info("""
+                Pastikan file model tersedia:
+                - model_cloud.pkl & preprocessor_cloud.pkl & encoder_cloud.pkl
+                - atau model_compressed.pkl & preprocessor.pkl & encoder.pkl
+                - atau model.pkl & preprocessor.pkl & encoder.pkl
+                """)
+                return None, None, None
 
 model, preprocessor, encoder = load_models()
 
@@ -238,129 +249,136 @@ with col2:
 
 # PREDIKSI
 if st.button("Prediksi Credit Score", type="primary"):
-    errors = []
-    
-    if annual_income <= 0:
-        errors.append("Pendapatan Tahunan harus lebih dari 0")
-    
-    if monthly_inhand_salary <= 0:
-        errors.append("Gaji Bulanan harus lebih dari 0")
-    
-    if outstanding_debt < 0:
-        errors.append("Total Hutang tidak boleh negatif")
-    
-    if total_emi_per_month < 0:
-        errors.append("Total EMI tidak boleh negatif")
-    
-    if errors:
-        for error in errors:
-            st.error(f"{error}")
+    if model is None:
+        st.error("Model tidak tersedia. Silakan upload file model.")
     else:
-        with st.spinner("Memproses data..."):
-            input_dict = {
-                'Age': age,
-                'Annual_Income': annual_income,
-                'Monthly_Inhand_Salary': monthly_inhand_salary,
-                'Num_Bank_Accounts': num_bank_accounts,
-                'Num_Credit_Card': num_credit_card,
-                'Interest_Rate': interest_rate,
-                'Num_of_Loan': num_of_loan,
-                'Delay_from_due_date': delay_from_due_date,
-                'Num_of_Delayed_Payment': num_of_delayed_payment,
-                'Changed_Credit_Limit': changed_credit_limit,
-                'Num_Credit_Inquiries': num_credit_inquiries,
-                'Outstanding_Debt': outstanding_debt,
-                'Credit_Utilization_Ratio': credit_utilization_ratio,
-                'Total_EMI_per_month': total_emi_per_month,
-                'Amount_invested_monthly': amount_invested_monthly,
-                'Monthly_Balance': monthly_balance,
-                'Debt_to_Income_Ratio': outstanding_debt / annual_income if annual_income > 0 else 0,
-                'Min_Payment_Ratio': total_emi_per_month / monthly_inhand_salary if monthly_inhand_salary > 0 else 0,
-                'Credit_History_Years': credit_history_years,
-                'Occupation': occupation,
-                'Credit_Mix': credit_mix,
-                'Payment_of_Min_Amount': payment_of_min_amount,
-                'Payment_Category': payment_category
-            }
-            
-            input_df = pd.DataFrame([input_dict])
-            
-            feature_cols = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-            input_df = input_df[feature_cols]
-            
-            input_processed = preprocessor.transform(input_df)
-            
-            prediction = model.predict(input_processed)[0]
-            probabilities = model.predict_proba(input_processed)[0]
-            
-            predicted_label = encoder.inverse_transform([prediction])[0]
-            
-            color_map = {
-                'Good': 'green',
-                'Standard': 'orange',
-                'Poor': 'red'
-            }
-            
-            st.subheader("Hasil Prediksi")
-            
-            col_result1, col_result2 = st.columns(2)
-            
-            with col_result1:
-                st.markdown(f"""
-                <div style="
-                    background-color: {color_map.get(predicted_label, 'gray')}20;
-                    padding: 20px;
-                    border-radius: 10px;
-                    border-left: 5px solid {color_map.get(predicted_label, 'gray')};
-                ">
-                    <h2 style="color: {color_map.get(predicted_label, 'gray')};">
-                        {predicted_label}
-                    </h2>
-                    <p style="font-size: 14px; color: #666;">
-                        Credit Score nasabah diprediksi sebagai <b>{predicted_label}</b>
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_result2:
-                st.markdown("#### Probabilitas per Kelas")
-                prob_df = pd.DataFrame({
-                    'Kelas': encoder.classes_,
-                    'Probabilitas': probabilities
-                })
-                st.dataframe(prob_df, hide_index=True, use_container_width=True)
-                st.bar_chart(prob_df.set_index('Kelas'))
-            
-            st.subheader("Rekomendasi")
-            
-            recommendations = {
-                'Good': """
-                Nasabah memiliki profil kredit yang sangat baik.
-                Direkomendasikan untuk mendapatkan penawaran produk premium.
-                Limit kredit dapat dinaikkan.
-                """,
-                'Standard': """
-                Nasabah memiliki profil kredit standar.
-                Perlu monitoring rutin terhadap perilaku pembayaran.
-                Dapat diberikan edukasi keuangan untuk meningkatkan skor.
-                """,
-                'Poor': """
-                Nasabah memiliki profil kredit yang buruk.
-                Perlu dilakukan evaluasi mendalam sebelum memberikan pinjaman.
-                Disarankan program restrukturisasi utang.
-                Monitoring ketat terhadap pembayaran.
-                """
-            }
-            
-            st.markdown(recommendations.get(predicted_label, ""))
-            
-            with st.expander("Detail Data yang Dimasukkan"):
-                st.dataframe(input_df, use_container_width=True)
+        errors = []
+        
+        if annual_income <= 0:
+            errors.append("Pendapatan Tahunan harus lebih dari 0")
+        
+        if monthly_inhand_salary <= 0:
+            errors.append("Gaji Bulanan harus lebih dari 0")
+        
+        if outstanding_debt < 0:
+            errors.append("Total Hutang tidak boleh negatif")
+        
+        if total_emi_per_month < 0:
+            errors.append("Total EMI tidak boleh negatif")
+        
+        if errors:
+            for error in errors:
+                st.error(f"{error}")
+        else:
+            with st.spinner("Memproses data..."):
+                try:
+                    input_dict = {
+                        'Age': age,
+                        'Annual_Income': annual_income,
+                        'Monthly_Inhand_Salary': monthly_inhand_salary,
+                        'Num_Bank_Accounts': num_bank_accounts,
+                        'Num_Credit_Card': num_credit_card,
+                        'Interest_Rate': interest_rate,
+                        'Num_of_Loan': num_of_loan,
+                        'Delay_from_due_date': delay_from_due_date,
+                        'Num_of_Delayed_Payment': num_of_delayed_payment,
+                        'Changed_Credit_Limit': changed_credit_limit,
+                        'Num_Credit_Inquiries': num_credit_inquiries,
+                        'Outstanding_Debt': outstanding_debt,
+                        'Credit_Utilization_Ratio': credit_utilization_ratio,
+                        'Total_EMI_per_month': total_emi_per_month,
+                        'Amount_invested_monthly': amount_invested_monthly,
+                        'Monthly_Balance': monthly_balance,
+                        'Debt_to_Income_Ratio': outstanding_debt / annual_income if annual_income > 0 else 0,
+                        'Min_Payment_Ratio': total_emi_per_month / monthly_inhand_salary if monthly_inhand_salary > 0 else 0,
+                        'Credit_History_Years': credit_history_years,
+                        'Occupation': occupation,
+                        'Credit_Mix': credit_mix,
+                        'Payment_of_Min_Amount': payment_of_min_amount,
+                        'Payment_Category': payment_category
+                    }
+                    
+                    input_df = pd.DataFrame([input_dict])
+                    
+                    feature_cols = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+                    input_df = input_df[feature_cols]
+                    
+                    input_processed = preprocessor.transform(input_df)
+                    
+                    prediction = model.predict(input_processed)[0]
+                    probabilities = model.predict_proba(input_processed)[0]
+                    
+                    predicted_label = encoder.inverse_transform([prediction])[0]
+                    
+                    color_map = {
+                        'Good': 'green',
+                        'Standard': 'orange',
+                        'Poor': 'red'
+                    }
+                    
+                    st.subheader("Hasil Prediksi")
+                    
+                    col_result1, col_result2 = st.columns(2)
+                    
+                    with col_result1:
+                        st.markdown(f"""
+                        <div style="
+                            background-color: {color_map.get(predicted_label, 'gray')}20;
+                            padding: 20px;
+                            border-radius: 10px;
+                            border-left: 5px solid {color_map.get(predicted_label, 'gray')};
+                        ">
+                            <h2 style="color: {color_map.get(predicted_label, 'gray')};">
+                                {predicted_label}
+                            </h2>
+                            <p style="font-size: 14px; color: #666;">
+                                Credit Score nasabah diprediksi sebagai <b>{predicted_label}</b>
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col_result2:
+                        st.markdown("#### Probabilitas per Kelas")
+                        prob_df = pd.DataFrame({
+                            'Kelas': encoder.classes_,
+                            'Probabilitas': probabilities
+                        })
+                        st.dataframe(prob_df, hide_index=True, use_container_width=True)
+                        st.bar_chart(prob_df.set_index('Kelas'))
+                    
+                    st.subheader("Rekomendasi")
+                    
+                    recommendations = {
+                        'Good': """
+                        Nasabah memiliki profil kredit yang sangat baik.
+                        Direkomendasikan untuk mendapatkan penawaran produk premium.
+                        Limit kredit dapat dinaikkan.
+                        """,
+                        'Standard': """
+                        Nasabah memiliki profil kredit standar.
+                        Perlu monitoring rutin terhadap perilaku pembayaran.
+                        Dapat diberikan edukasi keuangan untuk meningkatkan skor.
+                        """,
+                        'Poor': """
+                        Nasabah memiliki profil kredit yang buruk.
+                        Perlu dilakukan evaluasi mendalam sebelum memberikan pinjaman.
+                        Disarankan program restrukturisasi utang.
+                        Monitoring ketat terhadap pembayaran.
+                        """
+                    }
+                    
+                    st.markdown(recommendations.get(predicted_label, ""))
+                    
+                    with st.expander("Detail Data yang Dimasukkan"):
+                        st.dataframe(input_df, use_container_width=True)
+                        
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    st.info("Pastikan file model (pkl) tersedia dan kompatibel.")
 
 
 # FOOTER
 st.markdown("---")
 st.caption("Credit Score Prediction App")
-
 
 
